@@ -148,6 +148,20 @@ pub mod non_sync {
 }
 
 #[test]
+fn drop_one() {
+    use non_sync::SharedTakeOnce;
+    use std::rc::Rc;
+
+    let counter = Rc::new(());
+
+    let handle1 = SharedTakeOnce::new(counter.clone());
+    assert_eq!(Rc::strong_count(&counter), 2);
+
+    drop(handle1);
+    assert_eq!(Rc::strong_count(&counter), 1);
+}
+
+#[test]
 fn drop_two() {
     use non_sync::SharedTakeOnce;
     use std::rc::Rc;
