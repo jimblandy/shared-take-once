@@ -77,11 +77,18 @@ pub mod non_sync {
             SharedTakeOnce(Box::into_raw(Box::new(cell::UnsafeCell::new(inner))))
         }
         pub fn take(self) -> Option<T> {
-            // Safety: Since `self` exists, the reference count must not be
-            // zero, so the `Inner` is still there. And since we are `!Send` and
-            // `!Sync` because of the `UnsafeCell`, this is the only thread that
-            // can see this value, so there are no other mutable references to
-            // the `Inner`, so we can construct one here.
+            // Safety:
+            //
+            // - Since `self` exists, the reference count must not be zero, so
+            //   the `Inner` is still there.
+            // - Since we are `!Send` and `!Sync` because of the `UnsafeCell`,
+            //   this is the only thread that can see this value.
+            // - Only code in this module can construct mutable references to the `Inner`.
+            // - This module's functions never return those mutable references, nor do
+            //   they call each other while they are live.
+            // - Thus, the fact that this method was called indicates that there are
+            //   no extant mutable references to our `Inner`.
+            // - Thus, it is safe for us to construct one here.
             let inner: &mut Inner<T> = unsafe { (*self.0).get_mut() };
             match inner.ref_count {
                 n if n > 0 => {
@@ -92,20 +99,28 @@ pub mod non_sync {
                     Some(value)
                 }
                 n if n < 0 => None,
-                _ => unreachable!("SharedTakeOnce should have been freed already"),
+                _ => unreachable!("SharedTakeOnce should not have a zero refcount"),
             }
-            // `self` is dropped here, which adjusts the refcount and frees
-            // the `Inner` if needed.
+            // `self` is dropped here, which adjusts the refcount and frees the
+            // `Inner` if needed. This is safe because the mutable reference
+            // `inner` is dead.
         }
     }
 
     impl<T> Drop for SharedTakeOnce<T> {
         fn drop(&mut self) {
-            // Safety: Since `self` exists, the reference count must not be
-            // zero, so the `Inner` is still there. And since we are `!Send` and
-            // `!Sync` because of the `UnsafeCell`, this is the only thread that
-            // can see this value, so there are no other mutable references to
-            // the `Inner`, so we can construct one here.
+            // Safety:
+            //
+            // - Since `self` exists, the reference count must not be zero, so
+            //   the `Inner` is still there.
+            // - Since we are `!Send` and `!Sync` because of the `UnsafeCell`,
+            //   this is the only thread that can see this value.
+            // - Only code in this module can construct mutable references to the `Inner`.
+            // - This module's functions never return those mutable references, nor do
+            //   they call each other while they are live.
+            // - Thus, the fact that this method was called indicates that there are
+            //   no extant mutable references to our `Inner`.
+            // - Thus, it is safe for us to construct one here.
             let inner: &mut Inner<T> = unsafe { (*self.0).get_mut() };
             match inner.ref_count {
                 n if n > 1 => {
